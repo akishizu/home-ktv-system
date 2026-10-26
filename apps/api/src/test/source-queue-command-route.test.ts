@@ -394,7 +394,12 @@ function createConfig(): ApiConfig {
     roomSlug: "living-room",
     port: 4000,
     host: "0.0.0.0",
-    scanIntervalMinutes: 360
+    scanIntervalMinutes: 360,
+    youtubeEnabled: false,
+    ytDlpPath: "yt-dlp",
+    youtubeSearchLimit: 10,
+    youtubeStreamCacheMs: 600000,
+    youtubeTimeoutMs: 20000
   };
 }
 

@@ -1327,6 +1327,7 @@ function SearchResults({
   t: TFunction;
 }) {
   const nas = controller.songSearch?.nas ?? null;
+  const online = controller.songSearch?.online ?? null;
 
   return (
     <div className="song-list search-overlay-results">
@@ -1346,6 +1347,45 @@ function SearchResults({
           ) : (
             <p className="empty-state indexed-empty">{t("search.indexedEmpty")}</p>
           )}
+        </section>
+      ) : null}
+
+      {online && online.candidates.length > 0 ? (
+        <section className="youtube-panel" aria-label="YouTube 補充">
+          <div className="panel-heading">
+            <h3>YouTube 補充</h3>
+            <span className={`search-status ${online.status}`}>{online.message}</span>
+          </div>
+          <p className="empty-state">YouTube 為補充曲庫，不會取代 NAS 曲庫；播放時會經由 API 解析串流連結，影片通常沒有原唱／伴唱切換。</p>
+          <div className="indexed-result-list compact-result-list">
+            {online.candidates.map((candidate) => (
+              <article className="song-row indexed-version-row compact-version-row" key={candidate.providerCandidateId}>
+                <img
+                  src={`https://i.ytimg.com/vi/${candidate.providerCandidateId}/hqdefault.jpg`}
+                  alt=""
+                  width={96}
+                  height={54}
+                  loading="lazy"
+                />
+                <div className="compact-version-main">
+                  <strong>{candidate.title}</strong>
+                  <div className="compact-version-meta">
+                    <span>{candidate.artistName}</span>
+                    {candidate.durationMs != null ? <span>{formatDurationMs(candidate.durationMs)}</span> : null}
+                    <span>{candidate.candidateType === "karaoke" ? "KTV / 伴奏" : "MV"}</span>
+                  </div>
+                </div>
+                <a
+                  className="primary-button compact-queue-button"
+                  href={`/media/online/youtube:${candidate.providerCandidateId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  播放
+                </a>
+              </article>
+            ))}
+          </div>
         </section>
       ) : null}
 
@@ -1690,6 +1730,16 @@ function queueRequesterToneClass(
     hash = (hash * 31 + char.charCodeAt(0)) % 6;
   }
   return `queue-requester--tone-${hash + 1}`;
+}
+
+function formatDurationMs(durationMs: number | null): string {
+  if (durationMs == null || !Number.isFinite(durationMs) || durationMs < 0) {
+    return "";
+  }
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function formatFileSize(sizeBytes: number | null): string {
