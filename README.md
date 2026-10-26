@@ -63,6 +63,7 @@ HomeKTV 的目标不是只做一个播放器，而是把家庭 KTV 真正会遇�
 - **双音轨 KTV 模型**：适配常见单文件原唱/伴唱资源，服务端保存音轨和媒体元数据。
 - **两种部署方式**：Docker Compose 快速体验，源码部署适合长期服务器运行。
 - **曲库整理工具**：热歌榜单、歌单热度、封面抓取、缩略图、风格标签和大曲库清理工具都在同一仓库里。
+- **YouTube 补充曲库（yt-dlp）**：NAS 曲库保持主位不变，搜索时在 NAS 结果下方额外显示 YouTube 结果，用 yt-dlp 搜索并在播放时解析串流链接（见 [YouTube 补充曲库](#youtube-补充曲库)）。
 
 ## 适合谁
 
@@ -267,8 +268,25 @@ home-ktv-system/
 - [项目结构](docs/project-structure.md)
 - [数据库结构](docs/database-schema.md)
 - [真实曲库索引](docs/KTV-FULL-INDEX.md)
+- [YouTube 补充曲库](docs/youtube.md)
 - [部署脚本入口](deploy/README.md)
 - [Android TV](clients/android-tv/README.md)
+
+## YouTube 补充曲库
+
+YouTube 在本 fork 中是**补充**曲库，不是主曲库：NAS 曲库优先显示、行为不变；只有搜索时才会在 NAS 结果下方出现「YouTube 补充」区段，手机控制端可直接播放该结果。播放走 `/media/online/youtube:<videoId>`，API 在播放当下用 yt-dlp 解析串流链接并 302 转向，不下载、不缓存视频文件，串流链接只在内存中短暂缓存（默认 10 分钟）。
+
+环境变量（见 `.env.example`，完整说明见 [YouTube 补充曲库](docs/youtube.md)）：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `YOUTUBE_ENABLED` | `true` | 设为 `false` 即完全停用 YouTube 搜索与播放 |
+| `YT_DLP_PATH` | `yt-dlp` | yt-dlp 在 API 主机上的路径，不在 PATH 时填绝对路径 |
+| `YOUTUBE_SEARCH_LIMIT` | `10` | 每次搜索最多返回的 YouTube 结果数（上限 20） |
+| `YOUTUBE_STREAM_CACHE_MS` | `600000` | 串流链接内存缓存时间（毫秒） |
+| `YOUTUBE_TIMEOUT_MS` | `20000` | 每次 yt-dlp 调用（搜索或串流解析）的超时（毫秒）；超时只会让 YouTube 区段为空，不会拖垮 NAS 搜索 |
+
+限制（详见 [YouTube 补充曲库](docs/youtube.md)）：yt-dlp 是非官方工具，YouTube 改版或某些主机网络环境下可能变慢甚至超时；YouTube 视频通常没有原唱／伴唱切换；房间点歌队列与 Android TV libVLC 队列整合暂未包括在本次改动中，YouTube 播放经由 `/media/online` 转向，适用于 Web TV／浏览器播放器。
 
 ## 产品边界
 
