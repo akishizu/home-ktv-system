@@ -13,6 +13,13 @@ export type MediaGatewayResolution =
       contentType: string;
     }
   | {
+      ok: true;
+      redirect: true;
+      sourceType: SongSourceType;
+      assetId: AssetId;
+      redirectUrl: string;
+    }
+  | {
       ok: false;
       statusCode: 404 | 409 | 500 | 501 | 503;
       code:
@@ -21,13 +28,17 @@ export type MediaGatewayResolution =
         | "MEDIA_ROOT_NOT_CONFIGURED"
         | "MEDIA_PATH_REJECTED"
         | "MEDIA_FILE_NOT_FOUND"
-        | "ONLINE_PLAYBACK_NOT_IMPLEMENTED";
+        | "ONLINE_PLAYBACK_NOT_IMPLEMENTED"
+        | "YOUTUBE_STREAM_UNAVAILABLE";
     };
+
+export type YouTubeStreamResolver = (videoId: string) => Promise<string | null>;
 
 export interface MediaGatewayOptions {
   playableMedia: PlayableMediaRepository;
   mediaPathResolver: MediaPathResolver;
   publicBaseUrl: string;
+  youtubeStreamResolver?: YouTubeStreamResolver;
 }
 
 export class MediaGateway {
@@ -41,7 +52,7 @@ export class MediaGateway {
 
   async resolveForStreaming(source: PlayableMediaLookup): Promise<MediaGatewayResolution> {
     if (source.sourceType === "online") {
-      return { ok: false, statusCode: 501, code: "ONLINE_PLAYBACK_NOT_IMPLEMENTED" };
+      return this.resolveOnlineForStreaming(source);
     }
 
     const asset = await this.options.playableMedia.findPlayableBySource(source);
@@ -65,6 +76,33 @@ export class MediaGateway {
       filePath: resolved.filePath,
       contentLength: resolved.sizeBytes,
       contentType: inferVideoContentType(asset.filePath)
+    };
+  }
+
+  private async resolveOnlineForStreaming(source: PlayableMediaLookup): Promise<MediaGatewayResolution> {
+    // Only the YouTube supplement is implemented for online playback.
+    // Every other online assetId keeps the historical 501 behaviour.
+    const prefix = "youtube:";
+    if (!source.assetId.startsWith(prefix)) {
+      return { ok: false, statusCode: 501, code: "ONLINE_PLAYBACK_NOT_IMPLEMENTED" };
+    }
+    const videoId = source.assetId.slice(prefix.length);
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      return { ok: false, statusCode: 404, code: "MEDIA_SOURCE_NOT_FOUND" };
+    }
+    if (!this.options.youtubeStreamResolver) {
+      return { ok: false, statusCode: 501, code: "ONLINE_PLAYBACK_NOT_IMPLEMENTED" };
+    }
+    const redirectUrl = await this.options.youtubeStreamResolver(videoId);
+    if (!redirectUrl) {
+      return { ok: false, statusCode: 503, code: "YOUTUBE_STREAM_UNAVAILABLE" };
+    }
+    return {
+      ok: true,
+      redirect: true,
+      sourceType: "online",
+      assetId: source.assetId,
+      redirectUrl
     };
   }
 

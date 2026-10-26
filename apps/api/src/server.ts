@@ -47,6 +47,8 @@ import { registerRoomInteractionRoutes } from "./routes/room-interactions.js";
 import { registerRoomSnapshotRoutes } from "./routes/room-snapshots.js";
 import { registerSongDiscoveryRoutes } from "./routes/song-discovery.js";
 import { registerSongSearchRoutes } from "./routes/song-search.js";
+import { searchYouTube } from "./modules/youtube/youtube-search.js";
+import { resolveYouTubeStreamUrl } from "./modules/youtube/youtube-stream.js";
 
 export interface CreateServerOptions {
   poolFactory?: (databaseUrl: string) => Pool;
@@ -97,7 +99,17 @@ export async function createServer(config: ApiConfigInput = loadConfig(), option
   const mediaGateway = new MediaGateway({
     playableMedia: repositories.playableMedia ?? { findPlayableBySource: async () => null },
     mediaPathResolver,
-    publicBaseUrl: resolvedConfig.publicBaseUrl
+    publicBaseUrl: resolvedConfig.publicBaseUrl,
+    ...(resolvedConfig.youtubeEnabled
+      ? {
+          youtubeStreamResolver: (videoId: string) =>
+            resolveYouTubeStreamUrl(videoId, {
+              ytDlpPath: resolvedConfig.ytDlpPath,
+              cacheMs: resolvedConfig.youtubeStreamCacheMs,
+              timeoutMs: resolvedConfig.youtubeTimeoutMs
+            })
+        }
+      : {})
   });
   const broadcaster = new RoomSnapshotBroadcaster();
 
@@ -173,7 +185,19 @@ export async function createServer(config: ApiConfigInput = loadConfig(), option
   await registerSongSearchRoutes(server, {
     rooms: repositories.rooms,
     queueEntries: repositories.queueEntries,
-    ...(repositories.ktvIndex ? { ktvIndex: repositories.ktvIndex } : {})
+    ...(repositories.ktvIndex ? { ktvIndex: repositories.ktvIndex } : {}),
+    youtubeEnabled: resolvedConfig.youtubeEnabled,
+    youtubeSearchLimit: resolvedConfig.youtubeSearchLimit,
+    ...(resolvedConfig.youtubeEnabled
+      ? {
+          youtubeSearch: (input: { query: string; limit: number }) =>
+            searchYouTube(input.query, {
+              ytDlpPath: resolvedConfig.ytDlpPath,
+              limit: input.limit,
+              timeoutMs: resolvedConfig.youtubeTimeoutMs
+            })
+        }
+      : {})
   });
   await registerSongDiscoveryRoutes(server, {
     rooms: repositories.rooms,

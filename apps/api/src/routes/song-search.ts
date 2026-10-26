@@ -1,13 +1,37 @@
 import type { FastifyInstance } from "fastify";
-import type { SongSearchIndexedResult, SongSearchNasResult, SongSearchResponse } from "@home-ktv/domain";
+import type {
+  OnlineCandidateCard,
+  SongSearchIndexedResult,
+  SongSearchNasResult,
+  SongSearchOnlineResult,
+  SongSearchResponse
+} from "@home-ktv/domain";
 import type { KtvIndexReadRepository } from "../modules/ktv-index/ktv-index-read-repository.js";
 import type { QueueEntryRepository } from "../modules/playback/repositories/queue-entry-repository.js";
 import type { RoomRepository } from "../modules/rooms/repositories/room-repository.js";
+import {
+  classifyYouTubeCandidate,
+  type YouTubeSearchResult
+} from "../modules/youtube/youtube-search.js";
+
+export type YouTubeSearchFn = (input: {
+  query: string;
+  limit: number;
+}) => Promise<YouTubeSearchResult[]>;
 
 export interface SongSearchRouteDependencies {
   rooms: RoomRepository;
   queueEntries: QueueEntryRepository;
   ktvIndex?: Pick<KtvIndexReadRepository, "searchIndexedSongs">;
+  /**
+   * Injectable YouTube search. When absent, the online section keeps the
+   * historical disabled behaviour, so existing callers and tests that do
+   * not provide a search function are unaffected. In production, server.ts
+   * supplies the real yt-dlp search when YOUTUBE_ENABLED is not "false".
+   */
+  youtubeSearch?: YouTubeSearchFn;
+  youtubeEnabled?: boolean;
+  youtubeSearchLimit?: number;
 }
 
 interface SongSearchQuery {
@@ -45,6 +69,15 @@ export async function registerSongSearchRoutes(
           queuedIndexedAssetIds: queuedNasAssetIds,
           unreadableIndexedAssetIds: []
         })) ?? [];
+      // YouTube is a supplement only: NAS results above are computed first
+      // and are returned unchanged whatever happens below. A YouTube
+      // failure must never turn the whole search into a 500.
+      const online = await resolveOnlineSection({
+        query,
+        youtubeSearch: dependencies.youtubeSearch,
+        youtubeEnabled: dependencies.youtubeEnabled,
+        youtubeSearchLimit: dependencies.youtubeSearchLimit
+      });
       const response: SongSearchResponse = {
         query,
         nas: {
@@ -52,20 +85,86 @@ export async function registerSongSearchRoutes(
           message: indexedResults.length > 0 ? "找到 NAS 曲库结果" : "未找到 NAS 曲库结果",
           results: indexedResults.map(toNasSearchResult)
         },
-        online: {
-          status: "disabled",
-          message: "暂不启用线上补歌",
-          requestSupplement: {
-            visible: false,
-            label: "请求补歌"
-          },
-          candidates: []
-        }
+        online
       };
 
       await reply.send(response);
     }
   );
+}
+
+const ONLINE_DISABLED: SongSearchOnlineResult = {
+  status: "disabled",
+  message: "暂不启用线上补歌",
+  requestSupplement: {
+    visible: false,
+    label: "请求补歌"
+  },
+  candidates: []
+};
+
+async function resolveOnlineSection(input: {
+  query: string;
+  youtubeSearch?: YouTubeSearchFn | undefined;
+  youtubeEnabled?: boolean | undefined;
+  youtubeSearchLimit?: number | undefined;
+}): Promise<SongSearchOnlineResult> {
+  if (!input.query.trim() || input.youtubeEnabled === false || !input.youtubeSearch) {
+    return ONLINE_DISABLED;
+  }
+  // Cap the query before it reaches yt-dlp, and cap the result count.
+  const query = input.query.trim().slice(0, 200);
+  const limit = Math.min(20, Math.max(1, Math.trunc(input.youtubeSearchLimit ?? 10) || 10));
+  let results: YouTubeSearchResult[];
+  try {
+    results = await input.youtubeSearch({ query, limit });
+  } catch {
+    return {
+      status: "disabled",
+      message: "YouTube 搜尋暫時無法使用，請稍後再試",
+      requestSupplement: {
+        visible: false,
+        label: "请求补歌"
+      },
+      candidates: []
+    };
+  }
+  if (results.length === 0) {
+    return {
+      status: "available",
+      message: "YouTube 未找到相關結果",
+      requestSupplement: {
+        visible: false,
+        label: "请求补歌"
+      },
+      candidates: []
+    };
+  }
+  return {
+    status: "available",
+    message: `找到 ${results.length} 個 YouTube 補充結果`,
+    requestSupplement: {
+      visible: false,
+      label: "请求补歌"
+    },
+    candidates: results.map(toYouTubeCandidate)
+  };
+}
+
+function toYouTubeCandidate(result: YouTubeSearchResult): OnlineCandidateCard {
+  return {
+    provider: "youtube",
+    providerCandidateId: result.videoId,
+    title: result.title,
+    artistName: result.channelTitle,
+    sourceLabel: "YouTube",
+    durationMs: result.durationMs,
+    candidateType: classifyYouTubeCandidate(result.title),
+    reliabilityLabel: "unknown",
+    riskLabel: "normal",
+    taskState: "discovered",
+    taskId: null
+  };
 }
 
 function toNasSearchResult(record: SongSearchIndexedResult): SongSearchNasResult {

@@ -87,6 +87,10 @@ export async function registerMediaRoutes(fastify: FastifyInstance, context: Med
     if (!resolution.ok) {
       return sendSourceMediaError(reply, resolution);
     }
+    if ("redirectUrl" in resolution) {
+      // NAS sources never redirect; this branch only narrows the type.
+      return reply.status(501).send({ error: "ONLINE_PLAYBACK_NOT_IMPLEMENTED" });
+    }
 
     return sendResolvedMedia(reply, {
       filePath: resolution.filePath,
@@ -107,6 +111,11 @@ export async function registerMediaRoutes(fastify: FastifyInstance, context: Med
     });
     if (!resolution.ok) {
       return sendSourceMediaError(reply, resolution);
+    }
+    // YouTube supplement: the stream URL is resolved at play time and
+    // expires, so redirect the player to it instead of proxying bytes.
+    if ("redirectUrl" in resolution) {
+      return reply.status(302).header("location", resolution.redirectUrl).send();
     }
 
     return sendResolvedMedia(reply, {
