@@ -5,8 +5,20 @@ ENV PATH=$PNPM_HOME:$PATH
 
 RUN corepack enable \
   && apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 postgresql-client \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 postgresql-client curl \
   && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp is NOT a Node dependency: the API shells out to the yt-dlp binary
+# for YouTube search/stream resolution. Bundle the standalone binary so the
+# Docker deployment works without a separate host install. Pinned (not
+# latest) for reproducible builds; override at build time with
+# --build-arg YT_DLP_VERSION=<version> when YouTube changes break it.
+# Debian's own yt-dlp package is deliberately NOT used: it lags upstream
+# by years and breaks against current YouTube far sooner.
+ARG YT_DLP_VERSION=2026.10.21
+RUN curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp" -o /usr/local/bin/yt-dlp \
+  && chmod +x /usr/local/bin/yt-dlp \
+  && yt-dlp --version
 
 WORKDIR /app
 

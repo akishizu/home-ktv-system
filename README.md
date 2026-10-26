@@ -276,7 +276,7 @@ home-ktv-system/
 
 YouTube 在本 fork 中是**补充**曲库，不是主曲库：NAS 曲库优先显示、行为不变；只有搜索时才会在 NAS 结果下方出现「YouTube 补充」区段，手机控制端可直接播放该结果。播放走 `/media/online/youtube:<videoId>`，API 在播放当下用 yt-dlp 解析串流链接并 302 转向，不下载、不缓存视频文件，串流链接只在内存中短暂缓存（默认 10 分钟）。
 
-环境变量（见 `.env.example`，完整说明见 [YouTube 补充曲库](docs/youtube.md)）：
+Docker 部署的 API 镜像已内置 yt-dlp（见 `deploy/docker/Dockerfile.api` 中的 `YT_DLP_VERSION`），无需另行安装；源码部署需在 API 主机上自行安装 yt-dlp。环境变量（见 `.env.example`，完整说明见 [YouTube 补充曲库](docs/youtube.md)）：
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |

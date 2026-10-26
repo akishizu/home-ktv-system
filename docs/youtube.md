@@ -30,6 +30,18 @@ yt-dlp 必須裝在**跑 API 的主機**上（不是跑瀏覽器的裝置）：
 yt-dlp --version
 ```
 
+**Docker 部署不用另外裝**：`deploy/docker/Dockerfile.api` 已經把
+yt-dlp standalone binary（預設版本 `2026.10.21`，見 Dockerfile 入面的
+`YT_DLP_VERSION`）打包入 API image，`yt-dlp` 會喺 `/usr/local/bin`
+入面、預設 PATH 就搵到，所以 `YT_DLP_PATH` 不用改。日後 YouTube
+改版令舊版失效時，可以用
+`docker build --build-arg YT_DLP_VERSION=<新版>` 重新 build，或者
+直接改 Dockerfile 入面的預設版本。
+
+**源码部署要另外裝**：喺跑 API 嗰部主機自己裝 yt-dlp（standalone
+binary、pip 或系統套件管理員皆可），裝完跑 `yt-dlp --version` 驗到
+先算；如果唔喺 PATH，就喺 `.env` 填絕對路徑去 `YT_DLP_PATH`。
+
 環境變數（見 `.env.example`）：
 
 | 變數 | 預設 | 說明 |
